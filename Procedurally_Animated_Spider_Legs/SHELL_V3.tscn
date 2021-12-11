@@ -1,0 +1,92 @@
+[gd_scene load_steps=4 format=2]
+
+[sub_resource type="GDScript" id=1]
+script/source = "tool
+extends VehicleBody
+
+
+export(float,0.01,65535) var set_mass = 10 #setget set_body_mass,get_body_mass
+
+onready var prev_mass = mass
+onready var prev_weight = weight
+
+var init = true
+
+var gravity_vector = 0
+var set_weight = 0
+
+
+
+func _ready():
+	
+	
+	mass = set_mass
+	
+	if(get_parent().is_in_group(\"builds\")):
+		gravity_vector = get_parent().gravity_acceleration
+#		set_weight = gravity_vector * self.set_mass
+#		for c in get_parent().chassis:
+#			pass
+#			prints(c.name,c.mass)
+		var error = get_parent().connect(\"update_g_scale\",self,\"update_gravity_scale\")
+		if error:
+			print(name,\"Connect failed\",get_parent())
+		update_gravity_scale(get_parent(),get_parent().scaled_gravity)
+
+
+#func ineterpolate_mass(new_mass):
+#	prev_mass = mass
+#	prev_weight = weight
+#	interp_mass.interpolate_property(self,\"mass\",mass,new_mass,1,Tween.TRANS_LINEAR,Tween.EASE_IN)
+##	interp_mass.interpolate_property(self,\"mass\",mass,new_mass,1,Tween.TRANS_LINEAR,Tween.EASE_IN)
+#	interp_mass.start()
+
+func _physics_process(_delta):
+	if(init):
+		init = false
+		_ready()
+	
+#	mass = 
+	if(set_mass != mass):# || set_weight != weight):
+#	if(prev_mass != mass):
+		prev_mass = mass
+		prev_weight = weight
+		mass = set_mass
+#		mass = lerp(mass,set_mass,0.5)
+		get_parent().update_weight_mass(get_parent(),prev_weight,prev_mass,false)
+		get_parent().update_weight_mass(get_parent(),weight,mass,true)
+		get_parent().tell_da_boys()
+
+	
+#	for c in get_children():
+#		print(c.name)
+
+
+func update_gravity_scale(parent,scaling):
+	if(get_parent() == parent):
+		set_gravity_scale(scaling)
+
+
+#
+#func _on_Interpolate_mass_tween_completed(object, key):
+#	prints(object,key,mass)
+"
+
+[sub_resource type="CubeMesh" id=2]
+size = Vector3( 10, 2, 10 )
+
+[sub_resource type="BoxShape" id=3]
+extents = Vector3( 5, 1, 5 )
+
+[node name="SHELL_V3" type="VehicleBody"]
+mass = 10.0
+linear_damp = 0.5
+angular_damp = 0.5
+script = SubResource( 1 )
+
+[node name="MeshInstance" type="MeshInstance" parent="."]
+mesh = SubResource( 2 )
+material/0 = null
+
+[node name="CHASSIS_SHAPE" type="CollisionShape" parent="."]
+shape = SubResource( 3 )

@@ -1,0 +1,233 @@
+[gd_scene load_steps=5 format=2]
+
+[ext_resource path="res://SHELL_V3.tscn" type="PackedScene" id=1]
+[ext_resource path="res://V11_HOVER_MODULE.tscn" type="PackedScene" id=2]
+[ext_resource path="res://Walker_ModuleV1_0.tscn" type="PackedScene" id=3]
+
+[sub_resource type="GDScript" id=1]
+script/source = "tool
+extends Spatial
+
+var thrusters = []
+#var chassis = [] ###
+var thruster_count = 0
+var chassis_count = 0
+var total_weight = 0 
+var total_mass = 0
+signal good_news_everyone(id)#,build_thruster_count,build_gravity_acceleration,build_scaled_gravity,build_total_mass)
+signal update_g_scale(id,g_s)
+export var gravity_acceleration = 9.8 setget set_gravity_acceleration, get_gravity_acceleration
+export(float,0,128,0.01) var scaled_gravity = 1 setget set_scaled_gravity, get_scaled_gravity
+
+
+
+var total_aabb_center_gt
+var total_aabb_center_t
+var total_aabb_size
+var total_aabb_longest_axis_length
+#var total_body_center
+
+# use only when scanning build for portal porting or shield matting
+#Don't update total_aabb when porting or while shield is active
+#prep build first for porting:
+#scan build to envelope it with portal stabilizing field
+
+
+
+var aabb_sum : AABB_Summer = AABB_Summer.new()
+var aabb_dict = {}
+
+func _ready():
+
+
+	update_build_aabb()
+	add_to_group(\"builds\")
+	gravity_acceleration = ProjectSettings.get_setting(\"physics/3d/default_gravity\")
+	tell_da_boys()
+	update_info(self)
+
+func update_build_aabb():
+	aabb_sum.update_total_aabb(self)
+	total_aabb_center_gt = aabb_sum.total_aabb_center_gt
+	total_aabb_center_t = aabb_sum.total_aabb_center_t
+	total_aabb_size = aabb_sum.total_aabb_size
+	total_aabb_longest_axis_length = aabb_sum.total_aabb_longest_axis_length
+#	total_body_center = aabb_sum.find_body_center_t(self)
+
+func set_gravity_acceleration(new_grav):
+	gravity_acceleration = new_grav
+	tell_da_boys()
+func get_gravity_acceleration():
+	return gravity_acceleration
+	
+func set_scaled_gravity(new_scale):
+	scaled_gravity = new_scale
+	tell_da_boys()
+func get_scaled_gravity():
+	return scaled_gravity
+
+
+
+func tell_da_boys():
+	emit_signal(\"update_g_scale\",self,scaled_gravity)
+	emit_signal(\"good_news_everyone\",self)#,thruster_count,gravity_acceleration,scaled_gravity,total_mass)
+
+
+
+func update_info(parent):
+	if(parent == self):
+		total_weight = 0
+		total_mass = 0
+		update_parts(parent)
+
+
+
+func update_parts(parent):
+	if(parent == self):
+		for c in get_children():
+			if(c is RigidBody):
+				update_weight_mass(parent,c.weight,c.mass,true)
+				if(c.is_in_group(\"propulsion\")):
+					update_propulsion_part(parent,c,true)
+#				if(c.is_in_group(\"SHELL\")):
+#					update_weight_mass(parent,c.weight,c.mass,true)
+#					update_chassis_parts(parent,c,true)
+		diagnostics()
+
+
+
+func update_weight_mass(parent,weight,mass,add):
+	if(parent == self):
+		if(add):
+			total_weight += weight
+			total_mass += mass
+		else:
+			total_weight -= weight
+			total_mass -= mass
+#		prints(\"total mass:\",total_mass,\"total weight\",total_weight)
+
+
+
+func update_propulsion_part(parent,part,add):
+	if(parent == self):
+		if(part.is_in_group(\"thrusters\")):
+			if(add):
+				if(!(thrusters.has(part))):
+					thrusters.push_front(part)
+			else:
+				if(thrusters.has(part)):
+					thrusters.remove(thrusters.find(part))
+			thruster_count = thrusters.size()
+
+
+
+#func update_chassis_parts(parent,part,add):
+#	if(parent == self):
+#		if(add):
+#			if(!chassis.has(part)):
+#				chassis.push_front(part)
+#		else:
+#			if(chassis.has(part)):
+#				chassis.remove(chassis.find(part))
+#		chassis_count = chassis.size()
+
+
+
+func diagnostics():
+		prints(\"UPDATING BUILD INFO:\")
+		prints(\"total_weight:\",total_weight)
+		prints(\"total_mass:\",total_mass)
+		prints(\"Thruster count:\",thrusters.size())
+#		prints(\"chassis count:\",chassis.size())
+
+
+
+
+
+
+
+#
+#
+#func update_total_aabb():
+#	var total_aabb = null
+#	total_aabb = construct_total_aabb(self,total_aabb)
+#	if(!total_aabb):
+#		return
+#	total_aabb_size = total_aabb.size
+#	total_aabb_center_gt = total_aabb.position + (total_aabb.size/2)
+#	total_aabb_longest_axis_length = total_aabb.get_longest_axis_size()
+#	total_aabb_center_t = self.global_transform.xform_inv(total_aabb_center_gt)
+#	prints(name,\"aabb\",total_aabb_center_gt,total_aabb_center_t,total_aabb_size,total_aabb_longest_axis_length)
+#
+#func construct_total_aabb(nd,aabb):
+#	if(nd is MeshInstance):
+#		if(!aabb):
+#			aabb = nd.get_transformed_aabb()
+#		else:
+#			aabb = aabb.merge(nd.get_transformed_aabb())
+#
+#	if(nd.get_child_count() > 0):
+#		for c in nd.get_children():
+#			aabb = construct_total_aabb(c,aabb)
+#
+#	return aabb
+#
+#
+#func update_total_aabb2():
+#	var total_aabb = AABB(Vector3(),Vector3())
+#	total_aabb = construct_total_aabb2(self,total_aabb)
+#	if(!total_aabb):
+#		return
+#	total_aabb_size = total_aabb.size
+#	total_aabb_center_gt = total_aabb.position + (total_aabb.size/2)
+#	total_aabb_center_t = self.global_transform.xform_inv(total_aabb_center_gt)
+#	total_aabb_longest_axis_length = total_aabb.get_longest_axis_size()
+#
+#	prints(name,\"aabb\",total_aabb_center_gt,total_aabb_center_t,total_aabb_size,total_aabb_longest_axis_length)
+#
+#func construct_total_aabb2(nd,aabb):
+#	if(nd is MeshInstance):
+##		if(!aabb):
+##			aabb = nd.get_transformed_aabb()
+##		else:
+#		aabb = aabb.merge(nd.get_transformed_aabb())
+#
+#	if(nd.get_child_count() > 0):
+#		for c in nd.get_children():
+#			aabb = construct_total_aabb(c,aabb)
+#
+#	return aabb
+"
+
+[node name="BUILD_V3_0" type="Spatial"]
+transform = Transform( 1, -3.49691e-07, 0, 3.49691e-07, 1, 0, 0, 0, 1, 0, 0, 0 )
+script = SubResource( 1 )
+
+[node name="Position3D" type="Position3D" parent="."]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.134, 0 )
+
+[node name="Position3D2" type="Position3D" parent="Position3D"]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, -5, -1.728, 5 )
+
+[node name="SHELL" parent="." instance=ExtResource( 1 )]
+mass = 100.0
+set_mass = 100.0
+
+[node name="Walker_Module2" parent="." instance=ExtResource( 3 )]
+transform = Transform( 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0 )
+
+[node name="V11_HOVER_MODULE" parent="." instance=ExtResource( 2 )]
+transform = Transform( 0.707107, 0, -0.707107, 0, 0.999999, 0, 0.707107, 0, 0.707107, -5, 1.74845e-06, -5 )
+strength_percentage_setting = 3.0
+
+[node name="V11_HOVER_MODULE2" parent="." instance=ExtResource( 2 )]
+transform = Transform( 0.707107, 0, 0.707107, 0, 0.999999, 0, -0.707107, 0, 0.707107, -5, 1.74845e-06, 5 )
+strength_percentage_setting = 3.0
+
+[node name="V11_HOVER_MODULE3" parent="." instance=ExtResource( 2 )]
+transform = Transform( -0.707106, 0, 0.707107, 0, 1, 0, -0.707106, 0, -0.707107, 5, -1.74845e-06, 5 )
+strength_percentage_setting = 3.0
+
+[node name="V11_HOVER_MODULE4" parent="." instance=ExtResource( 2 )]
+transform = Transform( -0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, -0.707107, 5, -1.74845e-06, -5 )
+strength_percentage_setting = 3.0

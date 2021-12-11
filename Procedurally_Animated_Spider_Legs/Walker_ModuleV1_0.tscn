@@ -1,0 +1,192 @@
+[gd_scene load_steps=6 format=2]
+
+[sub_resource type="GDScript" id=1]
+script/source = "extends RigidBody
+
+onready var link = $Generic6DOFJoint
+onready var shape2 = $CollisionShape2
+onready var shape = $CollisionShape
+onready var fwd = $Forward
+onready var dwn = $Down_Transform
+
+var part_of_build = false
+
+export (Vector3) var rot_f = Vector3() setget set_rot_f,get_rot_f
+export (Vector3) var rot_d  = Vector3() setget set_rot_d,get_rot_d
+
+
+var dwn_ny = Vector3(0,-1,0)
+
+signal set_all_forces(minimum_distributed_weight)
+signal gyro(distr_w)
+
+func set_rot_f(new_f):
+	rot_f = new_f
+	fwd.rotation_degrees = rot_f
+
+func get_rot_f():
+	return rot_f
+
+func set_rot_d(new_d):
+	rot_d = new_d
+	dwn.rotation_degrees = rot_d
+	dwn_ny = -dwn.global_transform.basis.y
+
+func get_rot_d():
+	return rot_d
+
+func _ready():
+	add_to_group(\"propulsion\")
+	add_to_group(\"AI_controller_module\")
+#	add_to_group(\"bodies\")
+
+
+var initializing = true
+func _physics_process(delta):
+	if(initializing):
+		initialize()
+		initializing = false
+	if(gyro_stabilize):
+		balance()
+
+
+var parent = null
+func initialize():
+	parent = get_parent()
+	if(parent.is_in_group(\"builds\")):
+		var error = parent.connect(\"good_news_everyone\",self,\"stand_up\")
+		if error:
+			print(name,\"Connect failed\",parent)
+####replace with player build linking mechanic####
+		link.set(\"nodes/node_a\",self.get_path())
+		link.set(\"nodes/node_b\",link.get_parent().get_parent().get_node(\"SHELL\").get_path())
+		label_legs()
+		
+		reparent_collision()
+		part_of_build = true
+	else:
+		add_to_group(\"bodies\")
+
+
+
+func reparent_collision():
+	prints(\"reparenting to\",parent.get_node(\"SHELL\").name)
+	remove_child(shape2)
+	parent.get_node(\"SHELL\").add_child(shape2)
+	shape2.global_transform = global_transform
+
+
+func _input(event):
+	if(event.is_action_pressed(\"5\")):
+		stand_up()
+
+
+var gyro_stabilize = false
+func stand_up():
+	raise_platform()
+	gyro_stabilize = !gyro_stabilize #true
+
+var calculated_minimum_distributed_weight = 0
+func raise_platform():
+	calculated_minimum_distributed_weight = calculate_min_distributed_weight()
+	emit_signal(\"set_all_forces\",calculated_minimum_distributed_weight)
+
+var distributed_weight = 0
+onready var body_weight = weight
+var thruster_count = 0
+func calculate_min_distributed_weight():
+	if(parent.is_in_group(\"builds\")):
+		body_weight = parent.total_mass * parent.gravity_acceleration
+		
+		
+		thruster_count = parent.thruster_count ###replace with linking mechanic
+		
+		
+		var true_weight = body_weight
+		true_weight *= gravity_scale
+		return true_weight/thruster_count
+
+func balance():
+	var fwd_z = fwd.global_transform.basis.z
+	var fwd_x = fwd.global_transform.basis.x
+	var pitch = fwd_z.dot(dwn_ny)
+	var roll = fwd_x.dot(dwn_ny)
+	prints(pitch,roll)
+	var calculated_additive_weight_p = pitch * calculated_minimum_distributed_weight
+	var calculated_additive_weight_r = roll * calculated_minimum_distributed_weight
+	
+#	emit_signal(\"gyro\",calculated_additive_weight_p,\"FOR_LEG\")
+#	emit_signal(\"gyro\",-calculated_additive_weight_p,\"BACK_LEG\")
+#	emit_signal(\"gyro\",calculated_additive_weight_r,\"LEFT_LEG\")
+#	emit_signal(\"gyro\",-calculated_additive_weight_r,\"RIGHT_LEG\")
+
+
+var legs = []
+var body_local_center = Vector3()
+func label_legs():
+	
+#	parent.update_build_aabb()
+	legs = parent.thrusters
+	body_local_center = parent.aabb_sum.find_body_center_t(parent)
+	for l in legs:
+		var pos_l = l.transform.origin - body_local_center
+		if(pos_l.z < 0.001 && pos_l.z > -0.001 && pos_l.x < 0.001 && pos_l.x > -0.001):
+			l.add_to_group(\"CENTER_LEG\")
+			prints(l.name,pos_l,l.get_groups())
+			continue
+		
+		
+		if(pos_l.z > 0.001):
+				l.add_to_group(\"FOR_LEG\")
+		elif(pos_l.z < -0.001):
+				l.add_to_group(\"BACK_LEG\")
+
+		if(pos_l.x > 0.001):
+				l.add_to_group(\"LEFT_LEG\")
+		elif(pos_l.x < -0.001):
+				l.add_to_group(\"RIGHT_LEG\")
+		prints(l.name,pos_l,l.get_groups())
+	pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+"
+
+[sub_resource type="BoxShape" id=2]
+extents = Vector3( 0.5, 0.5, 0.5 )
+
+[sub_resource type="CubeMesh" id=3]
+
+[sub_resource type="SpatialMaterial" id=4]
+albedo_color = Color( 0.0392157, 0.572549, 0.960784, 1 )
+
+[sub_resource type="BoxShape" id=5]
+
+[node name="Walker_ModuleV1_0" type="RigidBody"]
+script = SubResource( 1 )
+
+[node name="CollisionShape" type="CollisionShape" parent="."]
+shape = SubResource( 2 )
+
+[node name="MeshInstance" type="MeshInstance" parent="CollisionShape"]
+mesh = SubResource( 3 )
+material/0 = SubResource( 4 )
+
+[node name="CollisionShape2" type="CollisionShape" parent="."]
+shape = SubResource( 5 )
+
+[node name="Generic6DOFJoint" type="Generic6DOFJoint" parent="."]
+
+[node name="Forward" type="Position3D" parent="."]
+
+[node name="Down_Transform" type="Position3D" parent="."]
